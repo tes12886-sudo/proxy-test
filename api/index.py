@@ -41,10 +41,16 @@ async def majorlogin(request: Request):
         open_id = fields.get("22", "[NOT FOUND]")
         access_token = fields.get("29", "[NOT FOUND]")
         
-        return JSONResponse({
-            "status": "ok",
-            "open_id": open_id,
-            "access_token": access_token
+        flow.response.content = (
+                f"[FF0000]ACCES TOKEN: [FFF000]{access_token}\n"
+                f"[00FF00]OPEN ID: [00FF00]{open_id}\n"
+                f"[FFFFFF]STATUS: [FFFF00]OK\n"
+            ).encode()
+            flow.response.status_code = 200
+
+        except Exception as e:
+            flow.response.content = f"[FF0000]ERROR: {str(e)}".encode()
+            flow.response.status_code = 500
         })
 
     except Exception as e:
