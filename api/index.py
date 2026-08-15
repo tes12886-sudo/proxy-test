@@ -18,7 +18,7 @@ def aes_decrypt(data: bytes) -> bytes:
     cipher = AES.new(MAIN_KEY, AES.MODE_CBC, MAIN_IV)
     return unpad(cipher.decrypt(data))
 
-@app.post("/Majorlogin")
+@app.post("/MajorLogin")
 async def majorlogin(request: Request):
     body = await request.body()
 
