@@ -16,17 +16,33 @@ class LoginInterceptor:
     def request(self, flow: http.HTTPFlow) -> None:
         # Cek apakah endpoint cocok
         path = flow.request.path.lower()
-        if not (path.startswith("/majorlogin")):
+        if not path.startswith("/majorlogin"):
             return
 
         body = flow.request.content
+        if not body:
+            flow.response = http.Response.make(
+                400,
+                b"Request body is empty\n",
+                {"Content-Type": "text/plain"}
+            )
+            return
 
         try:
             # Cek apakah body berupa hex string atau raw bytes
             try:
-                ciphertext = bytes.fromhex(body.decode().strip())
+                ciphertext = bytes.fromhex(body.decode("utf-8").strip())
             except Exception:
                 ciphertext = body
+
+            # Validasi panjang blok AES (harus kelipatan 16 byte)
+            if len(ciphertext) == 0 or len(ciphertext) % 16 != 0:
+                flow.response = http.Response.make(
+                    400,
+                    b"Invalid ciphertext length for AES-CBC\n",
+                    {"Content-Type": "text/plain"}
+                )
+                return
 
             decrypted = aes_decrypt(ciphertext)
             decoded, _ = blackboxprotobuf.protobuf_to_json(decrypted)
