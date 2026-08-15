@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/MajorLogin", "destination": "/api/MajorLogin" },
+    { "source": "/majorlogin", "destination": "/api/MajorLogin" }
+  ]
+}
