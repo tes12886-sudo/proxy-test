@@ -1,33 +1,65 @@
-from http.server import BaseHTTPRequestHandler
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from Crypto.Cipher import AES
-import json
-import time
+import blackboxprotobuf
 
-MAIN_KEY = b'Yg&tc%DEuh6%Zc^8'
-MAIN_IV  = b'6oyZDr22E3ychjM%'
+app = FastAPI()
 
-def pad(data: bytes) -> bytes:
-    pad_len = 16 - (len(data) % 16)
-    return data + bytes([pad_len] * pad_len)
+MAIN_KEY = b"Yg&tc%DEuh6%Zc^8"
+MAIN_IV  = b"6oyZDr22E3ychjM%"
 
-def aes_cbc_encrypt(data_bytes: bytes) -> bytes:
+def unpad(data: bytes) -> bytes:
+    n = data[-1]
+    if n < 1 or n > AES.block_size:
+        raise ValueError("Invalid PKCS#7 padding")
+    return data[:-n]
+
+def aes_decrypt(data: bytes) -> bytes:
     cipher = AES.new(MAIN_KEY, AES.MODE_CBC, MAIN_IV)
-    return cipher.encrypt(pad(data_bytes))
+    return unpad(cipher.decrypt(data))
 
-class handler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        # Payload response akun tidak ditemukan
-        payload = {
-            "type": "account_not_found",
-            "msg": "account not found",
-            "server_time": int(time.time() * 1000)
-        }
+@app.post("/Majorlogin")
+async def majorlogin(request: Request):
+    body = await request.body()
+
+    try:
+        # Body diasumsikan berupa encrypted AES dalam bentuk HEX
+        ciphertext = bytes.fromhex(body.decode().strip())
+
+        decrypted = aes_decrypt(ciphertext)
+
+        decoded, typedef = blackboxprotobuf.protobuf_to_json(decrypted)
+
+        # blackboxprotobuf biasanya mengembalikan JSON string
+        import json
+        fields = json.loads(decoded)
+
+        open_id = fields.get("22", "[NOT FOUND]")
+
+        # Jangan expose credential/token asli
+        access_token = fields.get("29", "[NOT FOUND]")
         
-        raw_response = (json.dumps(payload) + "\n").encode('utf-8')
-        encrypted_response = aes_cbc_encrypt(raw_response)
+        return JSONResponse({
+            "status": "ok",
+            "open_id": open_id,
+            "access_token": access_token
+        })
 
-        self.send_response(200)
-        self.send_header('Content-type', 'application/octet-stream')
-        self.end_headers()
-        self.wfile.write(encrypted_response)
-        return
+    except Exception as e:
+        return JSONResponse(
+            {
+                "status": "error",
+                "message": str(e)
+            },
+            status_code=400
+        )
+
+@app.api_route(
+    "/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+)
+async def not_found(path: str):
+    return HTMLResponse(
+        "<html><body><h1>404 Not Found</h1></body></html>",
+        status_code=404
+    )
