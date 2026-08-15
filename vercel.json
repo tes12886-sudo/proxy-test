@@ -1,6 +1,15 @@
 {
-  "rewrites": [
-    { "source": "/MajorLogin", "destination": "/api/MajorLogin" },
-    { "source": "/majorlogin", "destination": "/api/MajorLogin" }
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "api/index.py"
+    }
   ]
 }
