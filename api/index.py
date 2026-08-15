@@ -21,7 +21,7 @@ def aes_decrypt(data: bytes) -> bytes:
 
 @app.post("/MajorLogin")
 @app.post("/majorlogin")
-async def majorlogin(request: Request):
+async def majorlogin(flow):
     body = await request.body()
 
     try:
@@ -40,14 +40,14 @@ async def majorlogin(request: Request):
 
         # Cek dulu open_id
         if open_id == "[NOT FOUND]":
-            return PlainTextResponse(
+            flow.response.content(
                 "[FF0000]Open ID tidak ditemukan!\n",
                 status_code=500,
             )
 
         # Cek access_token
         if access_token == "[NOT FOUND]":
-            return PlainTextResponse(
+            flow.response.content(
                 f"[FF0000]Open ID: [FFF000]{open_id}\n"
                 f"[FF0000]Access Token tidak ditemukan!\n"
                 f"[FFFFFF]Status: [FF0000]FAILED\n",
@@ -55,11 +55,11 @@ async def majorlogin(request: Request):
             )
 
         # Sukses
-        return PlainTextResponse(
+        flow.response.content(
             f"[FF0000]OPEN ID: [00FF00]{open_id}\n"
             f"[FF0000]ACCESS TOKEN: [FFF000]{access_token}\n"
             f"[FFFFFF]Status: [00FF00]OK\n",
-            status_code=200,
+            flow.response.content.status_code=200,
         )
 
     except Exception as e:
