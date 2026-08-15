@@ -1,8 +1,12 @@
 import json
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
+from fastapi import FastAPI, Request
+from fastapi.responses import PlainTextResponse, JSONResponse
 import blackboxprotobuf
-from mitmproxy import http
+
+# Inisialisasi 'app' yang dicari oleh Vercel
+app = FastAPI()
 
 MAIN_KEY = b"Yg&tc%DEuh6%Zc^8"
 MAIN_IV = b"6oyZDr22E3ychjM%"
@@ -12,88 +16,57 @@ def aes_decrypt(data: bytes) -> bytes:
     decrypted = cipher.decrypt(data)
     return unpad(decrypted, AES.block_size)
 
-class LoginInterceptor:
-    def request(self, flow: http.HTTPFlow) -> None:
-        # Cek apakah endpoint cocok
-        path = flow.request.path.lower()
-        if not path.startswith("/majorlogin"):
-            return
+@app.post("/MajorLogin")
+@app.post("/majorlogin")
+@app.post("/api/MajorLogin")
+@app.post("/api/majorlogin")
+async def handle_major_login(request: Request):
+    body = await request.body()
+    if not body:
+        return PlainTextResponse("Request body is empty\n", status_code=400)
 
-        body = flow.request.content
-        if not body:
-            flow.response = http.Response.make(
-                400,
-                b"Request body is empty\n",
-                {"Content-Type": "text/plain"}
-            )
-            return
-
+    try:
+        # Cek apakah body berupa hex string atau raw bytes
         try:
-            # Cek apakah body berupa hex string atau raw bytes
-            try:
-                ciphertext = bytes.fromhex(body.decode("utf-8").strip())
-            except Exception:
-                ciphertext = body
+            ciphertext = bytes.fromhex(body.decode("utf-8").strip())
+        except Exception:
+            ciphertext = body
 
-            # Validasi panjang blok AES (harus kelipatan 16 byte)
-            if len(ciphertext) == 0 or len(ciphertext) % 16 != 0:
-                flow.response = http.Response.make(
-                    400,
-                    b"Invalid ciphertext length for AES-CBC\n",
-                    {"Content-Type": "text/plain"}
-                )
-                return
+        # Validasi panjang ciphertext (harus kelipatan 16 byte untuk AES)
+        if len(ciphertext) == 0 or len(ciphertext) % 16 != 0:
+            return PlainTextResponse("Invalid ciphertext length for AES-CBC\n", status_code=400)
 
-            decrypted = aes_decrypt(ciphertext)
-            decoded, _ = blackboxprotobuf.protobuf_to_json(decrypted)
-            fields = json.loads(decoded)
+        decrypted = aes_decrypt(ciphertext)
+        decoded, _ = blackboxprotobuf.protobuf_to_json(decrypted)
+        fields = json.loads(decoded)
 
-            open_id = fields.get("22")
-            access_token = fields.get("29")
+        open_id = fields.get("22")
+        access_token = fields.get("29")
 
-            # Cek open_id
-            if not open_id:
-                flow.response = http.Response.make(
-                    400,
-                    b"[FF0000]Open ID tidak ditemukan!\n",
-                    {"Content-Type": "text/plain"}
-                )
-                return
+        # Cek open_id
+        if not open_id:
+            return PlainTextResponse("[FF0000]Open ID tidak ditemukan!\n", status_code=400)
 
-            # Cek access_token
-            if not access_token:
-                msg = (
-                    f"[FF0000]Open ID: [FFF000]{open_id}\n"
-                    f"[FF0000]Access Token tidak ditemukan!\n"
-                    f"[FFFFFF]Status: [FF0000]FAILED\n"
-                )
-                flow.response = http.Response.make(
-                    400,
-                    msg.encode("utf-8"),
-                    {"Content-Type": "text/plain"}
-                )
-                return
-
-            # Sukses
+        # Cek access_token
+        if not access_token:
             msg = (
-                f"[FF0000]OPEN ID: [00FF00]{open_id}\n"
-                f"[FF0000]ACCESS TOKEN: [FFF000]{access_token}\n"
-                f"[FFFFFF]Status: [00FF00]OK\n"
+                f"[FF0000]Open ID: [FFF000]{open_id}\n"
+                f"[FF0000]Access Token tidak ditemukan!\n"
+                f"[FFFFFF]Status: [FF0000]FAILED\n"
             )
-            flow.response = http.Response.make(
-                200,
-                msg.encode("utf-8"),
-                {"Content-Type": "text/plain"}
-            )
+            return PlainTextResponse(msg, status_code=400)
 
-        except Exception as e:
-            error_data = json.dumps({"status": "error", "message": str(e)})
-            flow.response = http.Response.make(
-                400,
-                error_data.encode("utf-8"),
-                {"Content-Type": "application/json"}
-            )
+        # Response sukses
+        msg = (
+            f"[FF0000]OPEN ID: [00FF00]{open_id}\n"
+            f"[FF0000]ACCESS TOKEN: [FFF000]{access_token}\n"
+            f"[FFFFFF]Status: [00FF00]OK\n"
+        )
+        return PlainTextResponse(msg, status_code=200)
 
-addons = [
-    LoginInterceptor()
-]
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+
+@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
+async def catch_all(path: str):
+    return PlainTextResponse("Not Found", status_code=404)
