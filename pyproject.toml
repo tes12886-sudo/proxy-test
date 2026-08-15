@@ -1,2 +1,2 @@
 [tool.vercel]
-entrypoint = "api/MajorLogin.py:handler"
+entrypoint = "api.MajorLogin:handler"
