@@ -39,12 +39,12 @@ async def majorlogin(request: Request):
         access_token = fields.get("29", "[NOT FOUND]")
 
         # Kalau mau tampilan warna, pake text biasa aja. JSON ga support warna [FF0000]
-        text_response = (
+        flow.response.content = (
             f"ACCES TOKEN: {access_token}\n"
             f"OPEN ID: {open_id}\n"
             f"STATUS: OK\n"
-        )
-        return Response(content=text_response, media_type="text/plain", status_code=200)
+        ).encode()
+        return Response(content=flow.response.content, media_type="text/plain", status_code=200)
 
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
