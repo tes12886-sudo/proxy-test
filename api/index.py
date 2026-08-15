@@ -21,23 +21,24 @@ def aes_decrypt(data: bytes) -> bytes:
 @app.post("/MajorLogin")
 @app.post("/majorlogin")
 async def majorlogin(request: Request):
-    body = await request.body()
+    body = await request.body() # ini udah bytes
 
     try:
-        # Body diasumsikan berupa encrypted AES dalam bentuk HEX
-        ciphertext = bytes.fromhex(body.decode().strip())
+        # Cek dulu: apakah ini hex atau raw bytes
+        try:
+            # coba parse sebagai hex string
+            ciphertext = bytes.fromhex(body.decode().strip())
+        except:
+            # kalau gagal, berarti emang udah raw bytes
+            ciphertext = body
 
         decrypted = aes_decrypt(ciphertext)
-
         decoded, typedef = blackboxprotobuf.protobuf_to_json(decrypted)
 
-        # blackboxprotobuf biasanya mengembalikan JSON string
         import json
         fields = json.loads(decoded)
 
         open_id = fields.get("22", "[NOT FOUND]")
-
-        # Jangan expose credential/token asli
         access_token = fields.get("29", "[NOT FOUND]")
         
         return JSONResponse({
@@ -47,14 +48,8 @@ async def majorlogin(request: Request):
         })
 
     except Exception as e:
-        return JSONResponse(
-            {
-                "status": "error",
-                "message": str(e)
-            },
-            status_code=400
-        )
-
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+        
 @app.api_route(
     "/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
