@@ -1,2 +1,11 @@
+[project]
+name = "mock-server"
+version = "0.1.0"
+description = "Mock Server Login"
+requires-python = ">=3.12"
+dependencies = [
+    "pycryptodome>=3.20.0",
+]
+
 [tool.vercel]
 entrypoint = "api.MajorLogin:handler"
