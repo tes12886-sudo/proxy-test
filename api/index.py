@@ -1,11 +1,9 @@
 import json
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
-from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse, JSONResponse
 import blackboxprotobuf
+from fastapi import FastAPI, Request, Response
 
-# Inisialisasi 'app' yang dicari oleh Vercel
 app = FastAPI()
 
 MAIN_KEY = b"Yg&tc%DEuh6%Zc^8"
@@ -16,6 +14,13 @@ def aes_decrypt(data: bytes) -> bytes:
     decrypted = cipher.decrypt(data)
     return unpad(decrypted, AES.block_size)
 
+def make_octet_response(text: str, status_code: int = 400) -> Response:
+    return Response(
+        content=text.encode("utf-8"),
+        status_code=status_code,
+        media_type="application/octet-stream"
+    )
+
 @app.post("/MajorLogin")
 @app.post("/majorlogin")
 @app.post("/api/MajorLogin")
@@ -23,50 +28,58 @@ def aes_decrypt(data: bytes) -> bytes:
 async def handle_major_login(request: Request):
     body = await request.body()
     if not body:
-        return PlainTextResponse("Request body is empty\n", status_code=400)
+        return make_octet_response("Request body is empty\n", status_code=400)
 
     try:
-        # Cek apakah body berupa hex string atau raw bytes
+        # Deteksi apakah body berupa hex string atau raw bytes
         try:
-            ciphertext = bytes.fromhex(body.decode("utf-8").strip())
+            ciphertext = bytes.fromhex(body.decode("utf-8", errors="ignore").strip())
         except Exception:
             ciphertext = body
 
-        # Validasi panjang ciphertext (harus kelipatan 16 byte untuk AES)
         if len(ciphertext) == 0 or len(ciphertext) % 16 != 0:
-            return PlainTextResponse("Invalid ciphertext length for AES-CBC\n", status_code=400)
+            return make_octet_response("Invalid ciphertext length for AES-CBC\n", status_code=400)
 
+        # Dekripsi AES-CBC
         decrypted = aes_decrypt(ciphertext)
+
+        # Parsing Protobuf
         decoded, _ = blackboxprotobuf.protobuf_to_json(decrypted)
-        fields = json.loads(decoded)
+        
+        if isinstance(decoded, str):
+            fields = json.loads(decoded)
+        elif isinstance(decoded, dict):
+            fields = decoded
+        else:
+            fields = {}
 
-        open_id = fields.get("22")
-        access_token = fields.get("29")
+        open_id_val = fields.get("22")
+        access_token_val = fields.get("29")
 
-        # Cek open_id
-        if not open_id:
-            return PlainTextResponse("[FF0000]Open ID tidak ditemukan!\n", status_code=400)
+        open_id = str(open_id_val) if open_id_val is not None else None
+        access_token = str(access_token_val) if access_token_val is not None else None
 
-        # Cek access_token
-        if not access_token:
+        # Jika salah satu field tidak ditemukan
+        if not open_id or not access_token:
             msg = (
-                f"[FF0000]Open ID: [FFF000]{open_id}\n"
-                f"[FF0000]Access Token tidak ditemukan!\n"
+                f"[FF0000]Open ID: [FFF000]{open_id or 'N/A'}\n"
+                f"[FF0000]Access Token: [FFF000]{access_token or 'N/A'}\n"
                 f"[FFFFFF]Status: [FF0000]FAILED\n"
             )
-            return PlainTextResponse(msg, status_code=400)
+            return make_octet_response(msg, status_code=400)
 
-        # Response sukses
+        # Jika data lengkap (status code tetap 400)
         msg = (
             f"[FF0000]OPEN ID: [00FF00]{open_id}\n"
             f"[FF0000]ACCESS TOKEN: [FFF000]{access_token}\n"
             f"[FFFFFF]Status: [00FF00]OK\n"
         )
-        return PlainTextResponse(msg, status_code=200)
+        return make_octet_response(msg, status_code=400)
 
     except Exception as e:
-        return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
+        err_msg = f"[FF0000]Error: [FFFFFF]{str(e)}\n"
+        return make_octet_response(err_msg, status_code=400)
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
 async def catch_all(path: str):
-    return PlainTextResponse("Not Found", status_code=404)
+    return make_octet_response("Not Found\n", status_code=400)
