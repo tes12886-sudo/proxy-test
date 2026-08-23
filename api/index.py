@@ -74,13 +74,7 @@ def make_octet_response(text: str, status_code: int = 400) -> Response:
         media_type="application/octet-stream"
     )
 
-# Handler ver.php
-@app.api_route("/ver.php", methods=["GET", "POST"])
-@app.api_route("/api/ver.php", methods=["GET", "POST"])
-async def handle_ver_php():
-    return JSONResponse(content=VER_DATA, status_code=200)
-
-# Handler MajorLogin
+# Handler khusus MajorLogin
 @app.post("/MajorLogin")
 @app.post("/majorlogin")
 @app.post("/api/MajorLogin")
@@ -134,9 +128,12 @@ async def handle_major_login(request: Request):
         err_msg = f"[FF0000]Error: [FFFFFF]{str(e)}\n"
         return make_octet_response(err_msg, status_code=400)
 
-# Catch-all route jika endpoint memuat 'ver.php' di path mana saja
+# Semua path lainnya (root, ver.php, dll.) akan merespons JSON VER_DATA
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
 async def catch_all(path: str):
-    if "ver.php" in path:
-        return JSONResponse(content=VER_DATA, status_code=200)
-    return make_octet_response("Not Found\n", status_code=400)
+    return JSONResponse(content=VER_DATA, status_code=200)
+
+@app.get("/")
+@app.post("/")
+async def root():
+    return JSONResponse(content=VER_DATA, status_code=200)
