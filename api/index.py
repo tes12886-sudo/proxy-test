@@ -1,4 +1,5 @@
 import json
+import re
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 import blackboxprotobuf
@@ -21,7 +22,7 @@ MAIN_KEY = b"Yg&tc%DEuh6%Zc^8"
 MAIN_IV = b"6oyZDr22E3ychjM%"
 BASE_TARGET_URL = "https://loginbp.ggpolarbear.com"
 
-# Data versi default (FF Biasa / Base)
+# Data versi default
 VER_DATA = {
     "code": 0,
     "is_server_open": True,
@@ -169,6 +170,7 @@ async def handle_major_login(request: Request):
                 else:
                     res_fields = {}
 
+                # Field 1 = account_id (UInt64)
                 if "1" in res_fields:
                     account_id = str(res_fields["1"])
 
@@ -227,6 +229,12 @@ async def catch_all(request: Request, path: str):
                 response_data["abhotupdate_cdn_url"] = "https://core-gmc.freefiremobile.com/live/ABHotUpdates/"
                 response_data["use_background_download"] = True
                 response_data["use_background_download_lobby"] = True
+
+                opt_ver = response_data["remote_option_version"]
+                opt_ver = re.sub(r"optionalavatarres:\d+", "optionalavatarres:708", opt_ver)
+                opt_ver = re.sub(r"optionalclothres:\d+", "optionalclothres:1150", opt_ver)
+                opt_ver = re.sub(r"optionalpetres:\d+", "optionalpetres:848", opt_ver)
+                response_data["remote_option_version"] = opt_ver
             
             # Konfigurasi khusus Free Fire Biasa (Prefix 1.x.x)
             elif major_prefix == "1":
@@ -235,6 +243,12 @@ async def catch_all(request: Request, path: str):
                 response_data["abhotupdate_cdn_url"] = "https://dl-core.cdn.freefiremobile.com/live/ABHotUpdates/"
                 response_data["use_background_download"] = False
                 response_data["use_background_download_lobby"] = False
+
+                opt_ver = response_data["remote_option_version"]
+                opt_ver = re.sub(r"optionalavatarres:\d+", "optionalavatarres:791", opt_ver)
+                opt_ver = re.sub(r"optionalclothres:\d+", "optionalclothres:1228", opt_ver)
+                opt_ver = re.sub(r"optionalpetres:\d+", "optionalpetres:910", opt_ver)
+                response_data["remote_option_version"] = opt_ver
             
         return JSONResponse(content=response_data, status_code=200)
 
@@ -294,5 +308,4 @@ async def root(request: Request):
             return make_octet_response(
                 f"Proxy Error: [FFFFFF]{str(e)}\n",
                 status_code=502,
-)
-            
+            )
