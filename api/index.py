@@ -37,7 +37,7 @@ VER_DATA = {
   "should_check_ab_load": False,
   "force_refresh_restype": "optionalavatarres",
   "remote_version": "1.130.22",
-  "server_url": "https://loginbp.ggpolarbear.com/",
+  "server_url": "https://bahlil.embege-enak-loh.my.id/",
   "is_review_server": False,
   "use_login_optional_download": True,
   "use_background_download": False,
