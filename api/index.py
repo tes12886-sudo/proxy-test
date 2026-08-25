@@ -21,7 +21,7 @@ MAIN_KEY = b"Yg&tc%DEuh6%Zc^8"
 MAIN_IV = b"6oyZDr22E3ychjM%"
 BASE_TARGET_URL = "https://loginbp.ggpolarbear.com"
 
-# Data versi
+# Data versi default (FF Biasa / Base)
 VER_DATA = {
     "code": 0,
     "is_server_open": True,
@@ -153,7 +153,6 @@ async def handle_major_login(request: Request):
                 except Exception:
                     res_ciphertext = res_content
 
-                # Coba dekripsi AES jika data berukuran kelipatan block size 16
                 if len(res_ciphertext) > 0 and len(res_ciphertext) % 16 == 0:
                     try:
                         res_decrypted = aes_decrypt(res_ciphertext)
@@ -170,7 +169,6 @@ async def handle_major_login(request: Request):
                 else:
                     res_fields = {}
 
-                # Field 1 = account_id (UInt64)
                 if "1" in res_fields:
                     account_id = str(res_fields["1"])
 
@@ -207,25 +205,36 @@ async def handle_major_login(request: Request):
             )
 
 
-# Handler Tangkap Semua Request (Catch-All)
+# Handler Tangkap Semua Request (Catch-All & Version Handler)
 @app.api_route(
     "/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
 )
 async def catch_all(request: Request, path: str):
     # Cek apakah path mengandung 'ver.php'
     if "ver.php" in path.lower() or path.lower().endswith("ver.php"):
-        # Salin dict agar data default tidak termodifikasi permanen
         response_data = VER_DATA.copy()
         
-        # Ambil query parameter ?version=...
         client_version = request.query_params.get("version")
         
         if client_version:
-            # Ambil digit mayor pertama sebelum titik (contoh: "1" dari "1.109.1" atau "2" dari "2.109.1")
             major_prefix = client_version.split(".")[0]
-            
-            # Ganti prefix remote_version (130.22 tetap dipertahankan)
             response_data["remote_version"] = f"{major_prefix}.130.22"
+            
+            # Konfigurasi khusus Free Fire MAX (Prefix 2.x.x)
+            if major_prefix == "2":
+                response_data["cdn_url"] = "https://dl.gmc.freefiremobile.com/live/ABHotUpdates/"
+                response_data["backup_cdn_url"] = "https://dl.gmc.freefiremobile.com/live/ABHotUpdates/"
+                response_data["abhotupdate_cdn_url"] = "https://core-gmc.freefiremobile.com/live/ABHotUpdates/"
+                response_data["use_background_download"] = True
+                response_data["use_background_download_lobby"] = True
+            
+            # Konfigurasi khusus Free Fire Biasa (Prefix 1.x.x)
+            elif major_prefix == "1":
+                response_data["cdn_url"] = "https://dl.cdn.freefiremobile.com/live/ABHotUpdates/"
+                response_data["backup_cdn_url"] = "https://dl.cdn.freefiremobile.com/live/ABHotUpdates/"
+                response_data["abhotupdate_cdn_url"] = "https://dl-core.cdn.freefiremobile.com/live/ABHotUpdates/"
+                response_data["use_background_download"] = False
+                response_data["use_background_download_lobby"] = False
             
         return JSONResponse(content=response_data, status_code=200)
 
@@ -263,7 +272,6 @@ async def catch_all(request: Request, path: str):
 # Handler Root Path
 @app.api_route("/", methods=["GET", "POST"])
 async def root(request: Request):
-    # Jika root langsung diakses tanpa ver.php, tetap forward ke base target
     headers = dict(request.headers)
     headers.pop("host", None)
     headers.pop("content-length", None)
@@ -286,4 +294,5 @@ async def root(request: Request):
             return make_octet_response(
                 f"Proxy Error: [FFFFFF]{str(e)}\n",
                 status_code=502,
-            )
+)
+            
