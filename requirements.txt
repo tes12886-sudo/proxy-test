@@ -1,6 +1,6 @@
-fastapi
-uvicorn
-httpx
-blackboxprotobuf
-pycryptodome
-upstash-redis
+fastapi==0.115.0
+mangum==0.17.0
+httpx==0.27.2
+blackboxprotobuf==0.5.1
+pycryptodome==3.20.0
+upstash-redis==1.2.3
