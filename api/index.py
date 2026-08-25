@@ -6,8 +6,11 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 import httpx
 from upstash_redis.asyncio import Redis
+from mangum import Mangum
 
 app = FastAPI()
+
+handler = Mangum(app)
 
 # Inisialisasi Upstash Redis (Sesuaikan kredensial Anda)
 redis_client = Redis(
