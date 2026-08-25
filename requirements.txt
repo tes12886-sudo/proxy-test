@@ -1,1 +1,6 @@
+fastapi
+uvicorn
+httpx
+blackboxprotobuf
 pycryptodome
+upstash-redis
