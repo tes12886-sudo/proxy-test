@@ -214,7 +214,20 @@ async def handle_major_login(request: Request):
 async def catch_all(request: Request, path: str):
     # Cek apakah path mengandung 'ver.php'
     if "ver.php" in path.lower() or path.lower().endswith("ver.php"):
-        return JSONResponse(content=VER_DATA, status_code=200)
+        # Salin dict agar data default tidak termodifikasi permanen
+        response_data = VER_DATA.copy()
+        
+        # Ambil query parameter ?version=...
+        client_version = request.query_params.get("version")
+        
+        if client_version:
+            # Ambil digit mayor pertama sebelum titik (contoh: "1" dari "1.109.1" atau "2" dari "2.109.1")
+            major_prefix = client_version.split(".")[0]
+            
+            # Ganti prefix remote_version (130.22 tetap dipertahankan)
+            response_data["remote_version"] = f"{major_prefix}.130.22"
+            
+        return JSONResponse(content=response_data, status_code=200)
 
     # Forward semua path lainnya ke target URL
     target_url = f"{BASE_TARGET_URL}/{path}"
